@@ -30,24 +30,36 @@ const app = express();
 // Trust reverse proxy for accurate IP resolution on Render, Heroku, Cloudflare
 app.set('trust proxy', 1);
 
-// Security / Rate limiting for auth routes
+// Configure CORS to support cross-origin requests and preflight safely
+const corsOptions = {
+  origin: true, // Echo request origin to support credentials and cross-site requests
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range', 'Content-Length', 'Content-Type'],
+  optionsSuccessStatus: 200, // Explicit 200 for legacy browser support on preflight
+};
+
+app.use(cors(corsOptions));
+// Handle preflight OPTIONS requests across all routes
+app.options('*', cors(corsOptions));
+
+// Security / Rate limiting for auth routes (skip OPTIONS preflight)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // max 100 requests per window
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    success: false,
-    message: 'Too many authentication attempts from this IP, please try again after 15 minutes',
+  skipSuccessfulRequests: true, // Only count failed attempts to prevent lockout
+  skip: (req) => req.method === 'OPTIONS', // Never rate-limit CORS preflight requests
+  handler: (req, res) => {
+    return res.status(429).json({
+      success: false,
+      message: 'Too many authentication attempts from this IP, please try again after 15 minutes',
+    });
   },
 });
 
-// Middleware
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
-}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 if (process.env.NODE_ENV !== 'test') {

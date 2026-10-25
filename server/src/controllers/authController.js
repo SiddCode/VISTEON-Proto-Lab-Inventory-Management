@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 
 const generateToken = (id) => {
@@ -16,42 +17,71 @@ const generateToken = (id) => {
 // @access  Public
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
 
-    if (!email || !password) {
+    const cleanEmail = email ? String(email).toLowerCase().trim() : '';
+
+    console.log(`[Auth] POST /api/auth/login received for email: ${cleanEmail || 'missing'}`);
+
+    // 1. Validate required fields
+    if (!cleanEmail || !password) {
+      console.warn('[Auth] Login rejected: Missing email or password');
       return res.status(400).json({
         success: false,
         message: 'Please provide email and password',
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select('+password');
+    // 2. Check MongoDB connection state before querying
+    if (mongoose.connection.readyState !== 1) {
+      console.error(`[Auth] Database not connected (readyState: ${mongoose.connection.readyState}). Cannot authenticate.`);
+      return res.status(503).json({
+        success: false,
+        message: 'Database service is temporarily unavailable. Please try again shortly.',
+      });
+    }
+
+    // 3. Query user by email
+    console.log(`[Auth] Querying user record for: ${cleanEmail}`);
+    const user = await User.findOne({ email: cleanEmail }).select('+password');
 
     if (!user) {
+      console.warn(`[Auth] Login rejected: User not found for email ${cleanEmail}`);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials. User not found.',
       });
     }
 
+    // 4. Verify account active state
     if (!user.active) {
+      console.warn(`[Auth] Login rejected: Account deactivated for email ${cleanEmail}`);
       return res.status(403).json({
         success: false,
         message: 'This account has been deactivated. Please contact administrator.',
       });
     }
 
+    // 5. Verify password hash
+    console.log(`[Auth] Verifying credentials for user: ${cleanEmail}`);
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
+      console.warn(`[Auth] Login rejected: Incorrect password for email ${cleanEmail}`);
       return res.status(401).json({
         success: false,
         message: 'Invalid email or password.',
       });
     }
 
+    // 6. Generate signed JWT token
     const token = generateToken(user._id);
 
-    res.json({
+    console.log(`[Auth] Login successful: ${cleanEmail} (ID: ${user._id}, Role: ${user.role})`);
+
+    // Explicitly guarantee application/json response header
+    res.setHeader('Content-Type', 'application/json');
+
+    return res.status(200).json({
       success: true,
       token,
       user: {
@@ -62,7 +92,12 @@ const login = async (req, res, next) => {
       },
     });
   } catch (err) {
-    next(err);
+    console.error('[Auth Error] Exception in login controller:', err.message);
+    return res.status(500).json({
+      success: false,
+      message: 'An unexpected server error occurred during authentication. Please try again.',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
+    });
   }
 };
 

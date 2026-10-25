@@ -47,15 +47,34 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const data = await authService.login(email, password);
-    if (data && data.success && data.token && data.user) {
-      setToken(data.token);
-      setUser(data.user);
-      localStorage.setItem('visteon_token', data.token);
-      localStorage.setItem('visteon_user', JSON.stringify(data.user));
-      setLoading(false);
-      return data.user;
+
+    // 1. Check if the server returned an empty body (e.g. Content-Length: 0 from static hosting proxy)
+    if (!data || (typeof data === 'string' && !data.trim())) {
+      throw new Error(
+        'Login failed: Empty response received from server (HTTP 200, Content-Length: 0). ' +
+        'Please verify that your frontend VITE_API_URL points to your deployed Render backend web service.'
+      );
     }
-    throw new Error(data?.message || 'Login failed: Invalid server response');
+
+    // 2. Extract token and user from direct or nested structure
+    const token = data.token || data.data?.token;
+    const user = data.user || data.data?.user;
+
+    if (token && user) {
+      setToken(token);
+      setUser(user);
+      localStorage.setItem('visteon_token', token);
+      localStorage.setItem('visteon_user', JSON.stringify(user));
+      setLoading(false);
+      return user;
+    }
+
+    // 3. If server provided a descriptive error message in JSON
+    if (data.message) {
+      throw new Error(data.message);
+    }
+
+    throw new Error('Login failed: Invalid server response (missing authentication credentials)');
   };
 
   const logout = () => {

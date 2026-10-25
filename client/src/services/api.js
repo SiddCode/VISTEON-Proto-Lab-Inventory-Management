@@ -2,12 +2,27 @@ import axios from 'axios';
 
 // Resolves API base URL:
 // 1. In production on Render/Vercel: uses VITE_API_URL if configured (e.g. https://visteon-inventory-api.onrender.com)
-// 2. In local development or unified deployment: defaults to '/api' (proxied by Vite to http://localhost:5000)
+// 2. Runtime fallback via localStorage ('visteon_api_url') or window.__VISTEON_API_URL__
+// 3. In local development or unified deployment: defaults to '/api' (proxied by Vite to http://localhost:5000)
 const resolveBaseUrl = () => {
+  // 1. Build-time Vite env variable
   const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
-  if (!envUrl) return '/api';
-  const clean = envUrl.replace(/\/+$/, '');
-  return clean.endsWith('/api') ? clean : `${clean}/api`;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+    const clean = envUrl.trim().replace(/\/+$/, '');
+    return clean.endsWith('/api') ? clean : `${clean}/api`;
+  }
+
+  // 2. Runtime fallback from localStorage or global config
+  if (typeof window !== 'undefined') {
+    const runtimeUrl = window.__VISTEON_API_URL__ || localStorage.getItem('visteon_api_url');
+    if (runtimeUrl && typeof runtimeUrl === 'string' && runtimeUrl.trim()) {
+      const clean = runtimeUrl.trim().replace(/\/+$/, '');
+      return clean.endsWith('/api') ? clean : `${clean}/api`;
+    }
+  }
+
+  // 3. Default relative path for local dev proxy or unified full-stack server
+  return '/api';
 };
 
 const api = axios.create({

@@ -3,12 +3,29 @@ import api from './api';
 export const authService = {
   async login(email, password) {
     const response = await api.post('/auth/login', { email, password });
-    return response.data;
+    let payload = response.data;
+    // Auto-parse stringified JSON if needed
+    if (typeof payload === 'string' && payload.trim()) {
+      try {
+        payload = JSON.parse(payload);
+      } catch {
+        // Keep as string
+      }
+    }
+    return payload;
   },
 
   async getMe() {
     const response = await api.get('/auth/me');
-    return response.data;
+    let payload = response.data;
+    if (typeof payload === 'string' && payload.trim()) {
+      try {
+        payload = JSON.parse(payload);
+      } catch {
+        // Keep as string
+      }
+    }
+    return payload;
   },
 
   async register(userData) {
