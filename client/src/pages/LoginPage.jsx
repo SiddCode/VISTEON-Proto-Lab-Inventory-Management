@@ -1,23 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useNotification } from '../context/NotificationContext';
-import VisteonLogo from '../components/common/VisteonLogo';
-import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle } from 'lucide-react';
+import { getApiConfigInfo, setRuntimeBackendUrl } from '../services/api';
+import { Lock, Mail, ArrowRight, ShieldCheck, CheckCircle, AlertTriangle, Server, Check, RefreshCw } from 'lucide-react';
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const { notifySuccess, notifyError } = useNotification();
+  const { notifySuccess, notifyError, notifyInfo } = useNotification();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Diagnostic Configuration State
+  const [configInfo, setConfigInfo] = useState(getApiConfigInfo());
+  const [showConfigModal, setShowConfigModal] = useState(!configInfo.isConfigured);
+  const [customBackendUrl, setCustomBackendUrl] = useState(configInfo.runtimeUrl || configInfo.envUrl || '');
+
+  useEffect(() => {
+    setConfigInfo(getApiConfigInfo());
+  }, []);
+
   const handleSubmit = async (e) => {
     e?.preventDefault();
     if (!email || !password) {
       notifyError('Please enter both email and password');
+      return;
+    }
+
+    if (!configInfo.isConfigured) {
+      notifyError('Backend URL is not configured. Please set your Render backend URL before logging in.');
+      setShowConfigModal(true);
       return;
     }
 
@@ -27,10 +42,32 @@ export default function LoginPage() {
       notifySuccess(`Welcome back, ${user.name}!`);
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      notifyError(err.response?.data?.message || err.message || 'Invalid login credentials');
+      const message = err.response?.data?.message || err.message || 'Invalid login credentials';
+      notifyError(message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSaveBackendUrl = (e) => {
+    e?.preventDefault();
+    if (!customBackendUrl.trim()) {
+      notifyError('Please enter a valid backend URL (e.g. https://your-backend.onrender.com)');
+      return;
+    }
+    setRuntimeBackendUrl(customBackendUrl);
+    notifySuccess('Backend URL saved. Reloading configuration...');
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
+  };
+
+  const handleResetBackendUrl = () => {
+    setRuntimeBackendUrl('');
+    notifyInfo('Runtime backend URL cleared. Reloading defaults...');
+    setTimeout(() => {
+      window.location.reload();
+    }, 500);
   };
 
   const fillCredentials = (demoEmail, demoPassword) => {
@@ -60,7 +97,75 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4">
+      <div className="mt-4 sm:mx-auto sm:w-full sm:max-w-md px-4">
+        {/* Missing Backend URL Warning Banner */}
+        {!configInfo.isConfigured && (
+          <div className="mb-4 bg-amber-50 border border-amber-300 rounded-xl p-4 text-xs text-amber-900 shadow-sm">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-bold text-amber-950">Backend Web Service URL Required</p>
+                <p className="mt-0.5 text-amber-800 leading-relaxed">
+                  This production frontend requires <code className="bg-amber-100 px-1 py-0.5 rounded font-mono font-semibold">VITE_API_URL</code> to reach the Express API.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowConfigModal((prev) => !prev)}
+                  className="mt-2 text-xs font-bold text-[#F58220] hover:text-[#DF7215] underline flex items-center gap-1"
+                >
+                  <Server className="w-3.5 h-3.5" />
+                  {showConfigModal ? 'Hide Configuration Panel' : 'Configure Backend URL Now'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Runtime URL Configuration Box */}
+        {showConfigModal && (
+          <div className="mb-4 bg-white border border-gray-200 rounded-xl p-4 shadow-sm text-xs">
+            <div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-100">
+              <span className="font-bold text-gray-900 flex items-center gap-1.5">
+                <Server className="w-3.5 h-3.5 text-[#F58220]" />
+                Render Backend Service URL
+              </span>
+              {configInfo.runtimeUrl && (
+                <button
+                  type="button"
+                  onClick={handleResetBackendUrl}
+                  className="text-gray-400 hover:text-gray-600 flex items-center gap-1 text-[11px]"
+                  title="Reset to default build URL"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Reset
+                </button>
+              )}
+            </div>
+            <form onSubmit={handleSaveBackendUrl} className="space-y-2.5">
+              <input
+                type="url"
+                value={customBackendUrl}
+                onChange={(e) => setCustomBackendUrl(e.target.value)}
+                placeholder="https://your-backend.onrender.com"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs font-mono focus:ring-1 focus:ring-[#F58220] focus:outline-none"
+              />
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-gray-400">
+                  Auto-appends <code className="font-mono">/api</code>
+                </span>
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 bg-[#F58220] hover:bg-[#DF7215] text-white font-bold rounded-lg text-xs flex items-center gap-1"
+                >
+                  <Check className="w-3 h-3" />
+                  Save & Apply
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Main Login Card */}
         <div className="bg-white py-8 px-6 shadow-xl rounded-2xl sm:px-10 border border-gray-200/80">
           <form className="space-y-5" onSubmit={handleSubmit}>
             {/* Email Field */}
@@ -151,10 +256,27 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Security badge footer */}
-        <p className="mt-4 text-center text-[11px] text-gray-400">
-          Protected by VISTEON Industrial SSO & Audit Encryption
-        </p>
+        {/* Security badge and diagnostic telemetry footer */}
+        <div className="mt-4 text-center space-y-1">
+          <p className="text-[11px] text-gray-400">
+            Protected by VISTEON Industrial SSO & Audit Encryption
+          </p>
+          <div className="text-[10px] text-gray-400 flex items-center justify-center gap-1.5">
+            <span>API Target:</span>
+            <code className="text-gray-600 bg-gray-100 px-1 py-0.5 rounded font-mono truncate max-w-[240px]">
+              {configInfo.activeBaseUrl === '__MISSING_PRODUCTION_BACKEND_URL__'
+                ? 'Unconfigured (Missing VITE_API_URL)'
+                : configInfo.activeBaseUrl}
+            </code>
+            <button
+              type="button"
+              onClick={() => setShowConfigModal((prev) => !prev)}
+              className="text-[#F58220] hover:underline font-semibold text-[10px]"
+            >
+              (Edit)
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

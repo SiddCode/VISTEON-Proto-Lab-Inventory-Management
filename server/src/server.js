@@ -62,6 +62,22 @@ const authLimiter = rateLimit({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Safe diagnostic logging middleware (Never logs passwords, tokens, or secret payloads)
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const contentType = res.getHeader('content-type') || 'none';
+    const contentLength = res.getHeader('content-length') || '-';
+    console.log(
+      `[HTTP Diagnostic] ${req.method} ${req.originalUrl} -> ` +
+      `Status: ${res.statusCode} | Content-Type: ${contentType} | Content-Length: ${contentLength} | ${duration}ms`
+    );
+  });
+  next();
+});
+
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
 }
