@@ -8,10 +8,13 @@ const { protect, authorize } = require('../middleware/auth');
 // @access  Public or Admin (can be called to initialize application)
 router.post('/', async (req, res, next) => {
   try {
-    await seedDatabase();
+    const forceReset = req.query.reset === 'true';
+    await seedDatabase({ forceReset });
     res.json({
       success: true,
-      message: 'Database seeded successfully with VISTEON sample inventory and accounts.',
+      message: forceReset
+        ? 'Database reset and seeded with VISTEON sample inventory and accounts.'
+        : 'Database verified idempotently. Existing data preserved.',
     });
   } catch (err) {
     next(err);

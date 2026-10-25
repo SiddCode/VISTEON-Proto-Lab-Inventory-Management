@@ -71,7 +71,14 @@ const login = async (req, res, next) => {
 // @access  Private
 const getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = req.user || (await User.findById(req.user?.id || req.user?._id));
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User session not found',
+      });
+    }
+
     res.json({
       success: true,
       user: {

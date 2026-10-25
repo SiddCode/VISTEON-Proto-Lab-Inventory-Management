@@ -25,7 +25,7 @@ export default function LoginPage() {
     try {
       const user = await login(email, password);
       notifySuccess(`Welcome back, ${user.name}!`);
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       notifyError(err.response?.data?.message || err.message || 'Invalid login credentials');
     } finally {

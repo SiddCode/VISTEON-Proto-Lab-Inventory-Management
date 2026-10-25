@@ -5,44 +5,68 @@ const StockTransaction = require('../models/StockTransaction');
 const Settings = require('../models/Settings');
 const { PREDEFINED_PROGRAMS, TRANSACTION_TYPES } = require('../config/constants');
 
-const seedDatabase = async () => {
-  console.log('[Seed] Starting VISTEON Inventory Database Seeding...');
+const seedDatabase = async ({ forceReset = false } = {}) => {
+  console.log(`[Seed] Starting VISTEON Inventory Database Seeding (forceReset: ${forceReset})...`);
 
-  // 1. Clear existing records to ensure fresh, clean state
-  await Promise.all([
-    User.deleteMany({}),
-    InventoryRecord.deleteMany({}),
-    StockTransaction.deleteMany({}),
-    Settings.deleteMany({}),
-  ]);
+  // 1. If explicit forceReset is requested, clear existing records
+  if (forceReset) {
+    console.log('[Seed] Force reset active: purging existing collections...');
+    await Promise.all([
+      User.deleteMany({}),
+      InventoryRecord.deleteMany({}),
+      StockTransaction.deleteMany({}),
+      Settings.deleteMany({}),
+    ]);
+  }
 
-  // 2. Create Default Settings
-  const settings = await Settings.create({
-    companyName: 'VISTEON',
-    companyLogo: '',
-    allowedPrograms: PREDEFINED_PROGRAMS,
-    defaultBoxPrefix: 'BOX-',
-    lowStockThreshold: 15,
-  });
+  // 2. Ensure Default Settings exist idempotently
+  let settings = await Settings.findOne();
+  if (!settings) {
+    settings = await Settings.create({
+      companyName: 'VISTEON',
+      companyLogo: '',
+      allowedPrograms: PREDEFINED_PROGRAMS,
+      defaultBoxPrefix: 'BOX-',
+      lowStockThreshold: 15,
+    });
+    console.log('[Seed] Default settings created.');
+  }
 
-  // 3. Create Users
-  const adminUser = await User.create({
-    name: 'Visteon Operations Lead',
-    email: 'admin@visteon.com',
-    password: 'admin123',
-    role: 'ADMIN',
-  });
+  // 3. Ensure Default Users exist idempotently without overwriting
+  let adminUser = await User.findOne({ email: 'admin@visteon.com' });
+  if (!adminUser) {
+    adminUser = await User.create({
+      name: 'Visteon Operations Lead',
+      email: 'admin@visteon.com',
+      password: process.env.DEFAULT_ADMIN_PASSWORD || 'admin123',
+      role: 'ADMIN',
+    });
+    console.log('[Seed] Admin user created: admin@visteon.com');
+  } else {
+    console.log('[Seed] Admin user verified: admin@visteon.com');
+  }
 
-  const operatorUser = await User.create({
-    name: 'Plant Operator',
-    email: 'operator@visteon.com',
-    password: 'operator123',
-    role: 'OPERATOR',
-  });
+  let operatorUser = await User.findOne({ email: 'operator@visteon.com' });
+  if (!operatorUser) {
+    operatorUser = await User.create({
+      name: 'Plant Operator',
+      email: 'operator@visteon.com',
+      password: process.env.DEFAULT_OPERATOR_PASSWORD || 'operator123',
+      role: 'OPERATOR',
+    });
+    console.log('[Seed] Operator user created: operator@visteon.com');
+  } else {
+    console.log('[Seed] Operator user verified: operator@visteon.com');
+  }
 
-  console.log('[Seed] Users created: admin@visteon.com / admin123, operator@visteon.com / operator123');
+  // 4. Check if inventory records already exist
+  const existingPartsCount = await InventoryRecord.countDocuments();
+  if (existingPartsCount > 0 && !forceReset) {
+    console.log(`[Seed] Database already contains ${existingPartsCount} active inventory records. Preserving existing inventory & transactions (idempotent).`);
+    return;
+  }
 
-  // 4. Create Sample Automotive Inventory Records
+  // 5. Create Sample Automotive Inventory Records
   const sampleParts = [
     {
       partNumber: 'VP-IC-8200-RN',

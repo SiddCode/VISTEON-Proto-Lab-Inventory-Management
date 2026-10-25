@@ -4,9 +4,10 @@ const seedDatabase = require('./seedData');
 
 const run = async () => {
   try {
+    const forceReset = process.argv.includes('--reset');
     await connectDB();
-    await seedDatabase();
-    console.log('[Seed CLI] Seeding completed.');
+    await seedDatabase({ forceReset });
+    console.log(`[Seed CLI] Seeding completed (forceReset: ${forceReset}).`);
     process.exit(0);
   } catch (err) {
     console.error('[Seed CLI] Seeding failed:', err);
